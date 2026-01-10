@@ -8,5 +8,4 @@ router.register('attendance', AttendanceViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('healthz', healthz),
 ]
