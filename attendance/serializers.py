@@ -1,12 +1,12 @@
 from rest_framework import serializers
-from .models import Employee, Attendance
+from .models import EmployeeProfile, AttendanceRecord
 
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Employee
+        model = EmployeeProfile
         fields = '__all__'
 
 class AttendanceSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Attendance
+        model = AttendanceRecord
         fields = '__all__'

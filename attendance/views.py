@@ -1,13 +1,25 @@
 from rest_framework import viewsets
-from .models import Employee, Attendance
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+from .models import EmployeeProfile, AttendanceRecord
 from .serializers import EmployeeSerializer, AttendanceSerializer
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
-    queryset = Employee.objects.all()
+    queryset = EmployeeProfile.objects.all()
     serializer_class = EmployeeSerializer
 
 
 class AttendanceViewSet(viewsets.ModelViewSet):
-    queryset = Attendance.objects.all()
+    queryset = AttendanceRecord.objects.all()
     serializer_class = AttendanceSerializer
+
+
+
+@api_view(["GET"])
+def healthz(request):
+    return Response({
+        "status": "ok",
+        "message": "hello world"
+    })

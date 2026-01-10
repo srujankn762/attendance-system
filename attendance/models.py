@@ -19,19 +19,8 @@ def generate_employee_id(department=None):
     return f"{prefix}{random_part}"
 
 
-class User(AbstractUser):
-    role = models.CharField(
-        max_length=20,
-        choices=Role.choices,
-        default=Role.EMPLOYEE
-    )
-
-    def __str__(self):
-        return f"{self.username} ({self.role})"
-
 
 class EmployeeProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     employee_id = models.CharField(max_length=7, unique=True, editable=False)
     department = models.CharField(max_length=50, choices=Department.choices)
     position = models.CharField(max_length=50, blank=True)
@@ -67,7 +56,6 @@ class AttendanceRecord(models.Model):
         choices=AttendanceStatus.choices,
         default=AttendanceStatus.ABSENT
     )
-    marked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='marked_attendance')
     note = models.TextField(blank=True)
 
     class Meta:
