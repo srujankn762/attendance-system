@@ -28,4 +28,3 @@ with smtplib.SMTP(smtp_server, port) as server:
 print("Email sent successfully!")
 
 
-
