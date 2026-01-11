@@ -1,0 +1,66 @@
+name: PR Summary Email
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  summarize-and-email:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Checkout code
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Step 2: Get PR changes
+    - name: Get PR changes
+      id: pr_changes
+      run: |
+        git fetch origin +refs/pull/${{ github.event.pull_request.number }}/merge
+        CHANGED_FILES=$(git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD)
+        echo "changed_files<<EOF" >> $GITHUB_ENV
+        echo "$CHANGED_FILES" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+
+    # Step 3: Generate PR summary using Google Gemini
+    - name: Generate PR summary
+      id: summary
+      run: |
+        PR_TITLE="${{ github.event.pull_request.title }}"
+        PR_BODY="${{ github.event.pull_request.body }}"
+        CHANGED_FILES="${changed_files}"
+
+        # Construct prompt
+        PROMPT="Summarize the following PR for the repository owner:\nTitle: $PR_TITLE\nBody: $PR_BODY\nChanged Files and Status:\n$CHANGED_FILES"
+
+        RESPONSE=$(curl -s -X POST "https://gemini.googleapis.com/v1beta/llm:generateText" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer ${{ secrets.GOOGLE_GEMINI_API_KEY }}" \
+          -d "{
+                \"model\": \"gemini-1.5-mini\",
+                \"prompt\": \"$PROMPT\",
+                \"temperature\": 0.5,
+                \"maxOutputTokens\": 500
+              }" | jq -r '.candidates[0].output')
+        
+        echo "pr_summary=$RESPONSE" >> $GITHUB_ENV
+
+    # Step 4: Send email
+    - name: Send Email
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: ${{ secrets.SMTP_SERVER }}
+        server_port: ${{ secrets.SMTP_PORT }}
+        username: ${{ secrets.SMTP_USERNAME }}
+        password: ${{ secrets.SMTP_PASSWORD }}
+        subject: "New PR Created: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
+        body: |
+          A new Pull Request has been created.
+
+          PR Link: ${{ github.event.pull_request.html_url }}
+
+          PR Summary:
+          ${{ env.pr_summary }}
+        to: ${{ secrets.REPO_OWNER_EMAIL }}
+        from: ${{ secrets.SMTP_USERNAME }}
