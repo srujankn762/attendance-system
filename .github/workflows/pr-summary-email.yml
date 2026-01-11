@@ -5,92 +5,60 @@ on:
     types: [opened, synchronize]
 
 jobs:
-  summarize-and-email:
+  pr-summary-email:
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Checkout code
-    - name: Checkout code
-      uses: actions/checkout@v3
+      # Step 1: Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    # Step 2: Get PR changes
-    - name: Get PR changes
-      id: pr_changes
-      run: |
-        git fetch origin +refs/pull/${{ github.event.pull_request.number }}/merge
-        CHANGED_FILES=$(git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD)
-        echo "changed_files<<EOF" >> $GITHUB_ENV
-        echo "$CHANGED_FILES" >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
+      # Step 2: Get PR details
+      - name: Get PR details
+        id: pr_info
+        run: |
+          echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_ENV
+          echo "pr_body=${{ github.event.pull_request.body }}" >> $GITHUB_ENV
+          echo "pr_url=${{ github.event.pull_request.html_url }}" >> $GITHUB_ENV
+          # Get changed files list
+          git fetch origin +refs/pull/${{ github.event.pull_request.number }}/merge
+          CHANGED_FILES=$(git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD)
+          echo "changed_files=$CHANGED_FILES" >> $GITHUB_ENV
 
-    # Step 3: Generate PR summary using Google Gemini
-    - name: Generate PR summary
-      id: summary
-      run: |
-        PR_TITLE="${{ github.event.pull_request.title }}"
-        PR_BODY="${{ github.event.pull_request.body }}"
-        CHANGED_FILES="${changed_files}"
+      # Step 3: Generate PR summary using Google Gemini
+      - name: Generate PR summary
+        id: summary
+        run: |
+          PROMPT="Summarize the following PR for the repository owner:\nTitle: ${{ env.pr_title }}\nBody: ${{ env.pr_body }}\nChanged Files:\n${{ env.changed_files }}"
 
-        # Construct prompt
-        PROMPT="Summarize the following PR for the repository owner:\nTitle: $PR_TITLE\nBody: $PR_BODY\nChanged Files:\n$CHANGED_FILES"
+          RESPONSE=$(curl -s -X POST "https://gemini.googleapis.com/v1beta/llm:generateText" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.GOOGLE_GEMINI_API_KEY }}" \
+            -d "{
+                  \"model\": \"gemini-1.5-mini\",
+                  \"prompt\": \"$PROMPT\",
+                  \"temperature\": 0.5,
+                  \"maxOutputTokens\": 500
+                }" | jq -r '.candidates[0].output')
 
-        RESPONSE=$(curl -s -X POST "https://gemini.googleapis.com/v1beta/llm:generateText" \
-          -H "Content-Type: application/json" \
-          -H "Authorization: Bearer ${{ secrets.GOOGLE_GEMINI_API_KEY }}" \
-          -d "{
-                \"model\": \"gemini-1.5-mini\",
-                \"prompt\": \"$PROMPT\",
-                \"temperature\": 0.5,
-                \"maxOutputTokens\": 500
-              }" | jq -r '.candidates[0].output')
-        
-        echo "pr_summary=$RESPONSE" >> $GITHUB_ENV
+          echo "pr_summary=$RESPONSE" >> $GITHUB_ENV
 
-    # Step 4: Send email via Gmail SMTP
-    - name: Send Email
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.x"
-    - run: |
-        pip install smtplib email
-        python - <<EOF
-import os
-import smtplib
-from email.mime.text import MIMEText
-from email.utils import formatdate
+      # Step 4: Send email via Gmail SMTP (no Python required)
+      - name: Send email via SMTP
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "New PR: #${{ github.event.pull_request.number }} - ${{ env.pr_title }}"
+          body: |
+            A new Pull Request has been created.
 
-smtp_server = os.environ["SMTP_SERVER"]
-port = int(os.environ["SMTP_PORT"])
-username = os.environ["SMTP_USERNAME"]
-password = os.environ["SMTP_PASSWORD"]
-to_email = os.environ["REPO_OWNER_EMAIL"]
+            PR Link: ${{ env.pr_url }}
 
-subject = f"New PR: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
-body = f"""A new Pull Request has been created.
-
-PR Link: ${{ github.event.pull_request.html_url }}
-
-PR Summary:
-${{ env.pr_summary }}
-"""
-
-msg = MIMEText(body, _charset="utf-8")
-msg["From"] = username
-msg["To"] = to_email
-msg["Subject"] = subject
-msg["Date"] = formatdate(localtime=True)
-
-with smtplib.SMTP(smtp_server, port) as server:
-    server.starttls()
-    server.login(username, password)
-    server.sendmail(username, [to_email], msg.as_string())
-
-print("Email sent successfully!")
-EOF
-      env:
-        SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
-        SMTP_PORT: ${{ secrets.SMTP_PORT }}
-        SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-        SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-        REPO_OWNER_EMAIL: ${{ secrets.REPO_OWNER_EMAIL }}
-        pr_summary: ${{ env.pr_summary }}
+            PR Summary:
+            ${{ env.pr_summary }}
+          to: ${{ secrets.REPO_OWNER_EMAIL }}
+          from: ${{ secrets.SMTP_USERNAME }}
+          secure: true
