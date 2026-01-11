@@ -32,7 +32,7 @@ jobs:
         CHANGED_FILES="${changed_files}"
 
         # Construct prompt
-        PROMPT="Summarize the following PR for the repository owner:\nTitle: $PR_TITLE\nBody: $PR_BODY\nChanged Files and Status:\n$CHANGED_FILES"
+        PROMPT="Summarize the following PR for the repository owner:\nTitle: $PR_TITLE\nBody: $PR_BODY\nChanged Files:\n$CHANGED_FILES"
 
         RESPONSE=$(curl -s -X POST "https://gemini.googleapis.com/v1beta/llm:generateText" \
           -H "Content-Type: application/json" \
@@ -46,21 +46,51 @@ jobs:
         
         echo "pr_summary=$RESPONSE" >> $GITHUB_ENV
 
-    # Step 4: Send email
+    # Step 4: Send email via Gmail SMTP
     - name: Send Email
-      uses: dawidd6/action-send-mail@v3
+      uses: actions/setup-python@v4
       with:
-        server_address: ${{ secrets.SMTP_SERVER }}
-        server_port: ${{ secrets.SMTP_PORT }}
-        username: ${{ secrets.SMTP_USERNAME }}
-        password: ${{ secrets.SMTP_PASSWORD }}
-        subject: "New PR Created: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
-        body: |
-          A new Pull Request has been created.
+        python-version: "3.x"
+    - run: |
+        pip install smtplib email
+        python - <<EOF
+import os
+import smtplib
+from email.mime.text import MIMEText
+from email.utils import formatdate
 
-          PR Link: ${{ github.event.pull_request.html_url }}
+smtp_server = os.environ["SMTP_SERVER"]
+port = int(os.environ["SMTP_PORT"])
+username = os.environ["SMTP_USERNAME"]
+password = os.environ["SMTP_PASSWORD"]
+to_email = os.environ["REPO_OWNER_EMAIL"]
 
-          PR Summary:
-          ${{ env.pr_summary }}
-        to: ${{ secrets.REPO_OWNER_EMAIL }}
-        from: ${{ secrets.SMTP_USERNAME }}
+subject = f"New PR: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
+body = f"""A new Pull Request has been created.
+
+PR Link: ${{ github.event.pull_request.html_url }}
+
+PR Summary:
+${{ env.pr_summary }}
+"""
+
+msg = MIMEText(body, _charset="utf-8")
+msg["From"] = username
+msg["To"] = to_email
+msg["Subject"] = subject
+msg["Date"] = formatdate(localtime=True)
+
+with smtplib.SMTP(smtp_server, port) as server:
+    server.starttls()
+    server.login(username, password)
+    server.sendmail(username, [to_email], msg.as_string())
+
+print("Email sent successfully!")
+EOF
+      env:
+        SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+        SMTP_PORT: ${{ secrets.SMTP_PORT }}
+        SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+        SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        REPO_OWNER_EMAIL: ${{ secrets.REPO_OWNER_EMAIL }}
+        pr_summary: ${{ env.pr_summary }}
