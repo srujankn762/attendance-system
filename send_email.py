@@ -29,5 +29,3 @@ print("Email sent successfully!")
 
 
 
-
-
