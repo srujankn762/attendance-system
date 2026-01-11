@@ -3,7 +3,7 @@ name: Build and Push to GHCR
 on:
   push:
     branches:
-      - master  # Trigger only when pushing to master
+      - main  # Trigger only when pushing to master
 
 jobs:
   build-and-push:
