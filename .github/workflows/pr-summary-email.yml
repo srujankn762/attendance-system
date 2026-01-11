@@ -1,75 +1,57 @@
-name: PR Summary Email
+name: PR Test Coverage Email
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
+    branches: [main]  # Target branch for PR
 
 jobs:
-  pr-summary-email:
+  run-tests-and-send-email:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository with full history
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          fetch-depth: 0  # Important: fetch full history
+          python-version: "3.10"
 
-      # Step 2: Get PR details and changed files
-      - name: Get PR details
-        id: pr_info
+      - name: Install dependencies
         run: |
-          echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_ENV
-          echo "pr_body=${{ github.event.pull_request.body }}" >> $GITHUB_ENV
-          echo "pr_url=${{ github.event.pull_request.html_url }}" >> $GITHUB_ENV
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
 
-          # Fetch PR merge commit
-          git fetch origin +refs/pull/${{ github.event.pull_request.number }}/merge
-
-          # Fetch base branch explicitly
-          git fetch origin ${{ github.event.pull_request.base.ref }}
-
-          # Get changed files between base branch and PR merge commit
-          CHANGED_FILES=$(git diff --name-status origin/${{ github.event.pull_request.base.ref }}...FETCH_HEAD | sed 's/^/* /')
-          echo "changed_files=$CHANGED_FILES" >> $GITHUB_ENV
-
-      # Step 3: Generate PR summary using Google Gemini
-      - name: Generate PR summary
-        id: summary
+      - name: Run tests with coverage
         run: |
-          PROMPT="Summarize the following PR for the repository owner:\nTitle: ${{ env.pr_title }}\nBody: ${{ env.pr_body }}\nChanged Files:\n${{ env.changed_files }}"
+          pytest --cov=. --cov-report=xml > result.log || true
+          COVERAGE=$(pytest --cov=. --cov-report=term | tail -1 | awk '{print $4}' | tr -d '%')
+          echo "coverage_percent=$COVERAGE" >> $GITHUB_ENV
+          cat result.log
 
-          RESPONSE=$(curl -s -X POST "https://gemini.googleapis.com/v1beta/llm:generateText" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.GOOGLE_GEMINI_API_KEY }}" \
-            -d "{
-                  \"model\": \"gemini-1.5-mini\",
-                  \"prompt\": \"$PROMPT\",
-                  \"temperature\": 0.5,
-                  \"maxOutputTokens\": 500
-                }" | jq -r '.candidates[0].output')
-
-          echo "pr_summary=$RESPONSE" >> $GITHUB_ENV
-
-      # Step 4: Send email via Gmail SMTP
-      - name: Send email via SMTP
+      - name: Send coverage email
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: ${{ secrets.SMTP_SERVER }}
           server_port: ${{ secrets.SMTP_PORT }}
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "New PR: #${{ github.event.pull_request.number }} - ${{ env.pr_title }}"
-          body: |
-            A new Pull Request has been created.
-
-            PR Link: ${{ env.pr_url }}
-
-            Changed Files:
-            ${{ env.changed_files }}
-
-            PR Summary:
-            ${{ env.pr_summary }}
           to: ${{ secrets.REPO_OWNER_EMAIL }}
           from: ${{ secrets.SMTP_USERNAME }}
+          subject: "Test Coverage Report for PR #${{ github.event.pull_request.number }}"
+          body: |
+            Hi,
+
+            A new PR has been raised/updated.
+
+            Coverage Percentage: ${{ env.coverage_percent }}%
+
+            Repo: ${{ github.repository }}
+            PR: #${{ github.event.pull_request.number }}
+            Branch: ${{ github.head_ref }}
+            Commit: ${{ github.sha }}
+
+            Regards,
+            GitHub Actions
           secure: true
