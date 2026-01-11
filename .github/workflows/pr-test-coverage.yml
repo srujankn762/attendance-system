@@ -1,12 +1,12 @@
-name: PR Test Coverage Email
+name: PR Test Coverage Report
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main]  # Target branch for PR
+    branches: [main]
 
 jobs:
-  run-tests-and-send-email:
+  coverage-report:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,28 +30,16 @@ jobs:
           echo "coverage_percent=$COVERAGE" >> $GITHUB_ENV
           cat result.log
 
-      - name: Send coverage email
-        uses: dawidd6/action-send-mail@v3
+      - name: Post coverage to PR comment
+        uses: peter-evans/create-or-update-comment@v4
         with:
-          server_address: ${{ secrets.SMTP_SERVER }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          to: ${{ secrets.REPO_OWNER_EMAIL }}
-          from: ${{ secrets.SMTP_USERNAME }}
-          subject: "Test Coverage Report for PR #${{ github.event.pull_request.number }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.pull_request.number }}
           body: |
-            Hi,
-
-            A new PR has been raised/updated.
-
+            **Test Coverage Report**
             Coverage Percentage: ${{ env.coverage_percent }}%
 
             Repo: ${{ github.repository }}
             PR: #${{ github.event.pull_request.number }}
             Branch: ${{ github.head_ref }}
             Commit: ${{ github.sha }}
-
-            Regards,
-            GitHub Actions
-          secure: true
