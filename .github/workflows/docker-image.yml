@@ -11,21 +11,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v2
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build Docker image
-      run: |
-        IMAGE_NAME=ghcr.io/srujan-kn/my-image-name:$(date +%s)
-        docker build . --file Dockerfile --tag $IMAGE_NAME
+      - name: Build and push Docker image
+        run: |
+          # Define image names
+          IMAGE_NAME=ghcr.io/srujan-kn/my-image-name
+          TIMESTAMP_TAG=$IMAGE_NAME:$(date +%s)
+          LATEST_TAG=$IMAGE_NAME:latest
 
-    - name: Push Docker image to GHCR
-      run: |
-        docker push $IMAGE_NAME
+          # Build the Docker image
+          docker build . --file Dockerfile --tag $TIMESTAMP_TAG --tag $LATEST_TAG
+
+          # Push both tags to GHCR
+          docker push $TIMESTAMP_TAG
+          docker push $LATEST_TAG
