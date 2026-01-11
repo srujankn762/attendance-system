@@ -3,7 +3,7 @@ name: Build and Push to GHCR
 on:
   push:
     branches:
-      - main  # Trigger only when pushing to master
+      - main  # Trigger only when pushing to main
 
 jobs:
   build-and-push:
@@ -29,4 +29,4 @@ jobs:
         with:
           context: ./
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/attendance_system:latest
+          tags: ghcr.io/${{ github.repository_owner | toLower }}/attendance_system:latest
