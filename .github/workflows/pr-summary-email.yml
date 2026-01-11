@@ -9,20 +9,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
+      # Step 1: Checkout repository with full history
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Important: fetch full history
 
-      # Step 2: Get PR details
+      # Step 2: Get PR details and changed files
       - name: Get PR details
         id: pr_info
         run: |
           echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_ENV
           echo "pr_body=${{ github.event.pull_request.body }}" >> $GITHUB_ENV
           echo "pr_url=${{ github.event.pull_request.html_url }}" >> $GITHUB_ENV
-          # Get changed files list
+
+          # Fetch PR merge commit
           git fetch origin +refs/pull/${{ github.event.pull_request.number }}/merge
-          CHANGED_FILES=$(git diff --name-status origin/${{ github.event.pull_request.base.ref }}...HEAD)
+
+          # Fetch base branch explicitly
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+
+          # Get changed files between base branch and PR merge commit
+          CHANGED_FILES=$(git diff --name-status origin/${{ github.event.pull_request.base.ref }}...FETCH_HEAD | sed 's/^/* /')
           echo "changed_files=$CHANGED_FILES" >> $GITHUB_ENV
 
       # Step 3: Generate PR summary using Google Gemini
@@ -43,7 +51,7 @@ jobs:
 
           echo "pr_summary=$RESPONSE" >> $GITHUB_ENV
 
-      # Step 4: Send email via Gmail SMTP (no Python required)
+      # Step 4: Send email via Gmail SMTP
       - name: Send email via SMTP
         uses: dawidd6/action-send-mail@v3
         with:
@@ -56,6 +64,9 @@ jobs:
             A new Pull Request has been created.
 
             PR Link: ${{ env.pr_url }}
+
+            Changed Files:
+            ${{ env.changed_files }}
 
             PR Summary:
             ${{ env.pr_summary }}
