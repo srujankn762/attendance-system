@@ -21,5 +21,5 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 def healthz(request):
     return Response({
         "status": "ok",
-        "message": "hello world updated"
+        "message": "hello world updated thanks"
     })
