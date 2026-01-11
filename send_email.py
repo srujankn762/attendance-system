@@ -26,6 +26,3 @@ with smtplib.SMTP(smtp_server, port) as server:
     server.sendmail(username, [to_email], msg.as_string())
 
 print("Email sent successfully!")
-
-
-
