@@ -6,6 +6,6 @@ from attendance.views import healthz
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('attendance.urls')),
-    path('healthz', healthz),
+    path('healthz/', healthz),
 
 ]
